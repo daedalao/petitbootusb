@@ -1,0 +1,393 @@
+.TH PETITBOOTUSB 1 "2026-05-05" "0.1" "petitbootusb"
+.
+.SH NAME
+petitbootusb \- multi-ISO USB preparation tool for POWER8/Petitboot systems
+.
+.SH SYNOPSIS
+.B petitbootusb
+.I /mnt/usb
+.br
+.B petitbootusb
+.I command
+.I /mnt/usb
+.RI [ args... ]
+.
+.SH DESCRIPTION
+.B petitbootusb
+prepares a USB drive so that an IBM POWER8 (or other OpenPOWER) system running
+.B Petitboot
+can present a multi-distro boot menu from it.
+.PP
+Unlike Ventoy (x86/UEFI only),
+.B petitbootusb
+works with the Petitboot firmware bootloader that ships in the PNOR flash of
+OpenPOWER machines such as the IBM S822LC (8335-GCA).
+Petitboot runs from firmware, scans attached storage for
+.BR grub.cfg / syslinux
+configuration files, and uses
+.B kexec
+to load the selected kernel directly.
+The USB does
+.B not
+need to be "bootable" in the MBR or UEFI sense.
+.PP
+Running
+.B petitbootusb
+.I /mnt/usb
+without a subcommand launches an interactive full-screen TUI (when stdout is a
+terminal).  All operations are also available as plain CLI subcommands.
+.
+.SH USB SETUP
+Before using
+.BR petitbootusb ,
+the USB drive must be partitioned, formatted, and mounted.
+A single ext4 partition is recommended:
+ext4 has no 4 GiB file size limit (some squashfs images exceed this) and
+preserves Unix permissions on the kernels and initrds.
+FAT32 also works for small ISOs but will refuse files larger than 4 GiB.
+No PReP boot partition is required.
+.PP
+.B 1. Find the device
+.RS
+.nf
+lsblk
+.fi
+.RE
+.PP
+.B 2. Partition (if the drive is blank)
+.RS
+.nf
+parted /dev/sdX mklabel msdos
+parted /dev/sdX mkpart primary ext4 1MiB 100%
+.fi
+.RE
+.PP
+.B 3. Format
+.RS
+.nf
+# ext4 with the conventional petitbootusb label, owned by your user
+sudo mkfs.ext4 \-L usbpetit \-E root_owner=$(id \-u):$(id \-g) /dev/sdX1
+.fi
+The
+.B root_owner
+extended option assigns ownership of the new filesystem root to your user
+at format time, so subsequent runs of
+.B petitbootusb
+do not need root.
+.PP
+.B 4. Mount
+.RS
+.nf
+sudo mount /dev/sdX1 /mnt/usb
+.fi
+.RE
+.PP
+.B 5. Run petitbootusb
+.RS
+.nf
+./petitbootusb /mnt/usb
+.fi
+.RE
+.PP
+When finished, unmount before removing the drive:
+.RS
+.nf
+umount /mnt/usb
+.fi
+.RE
+.
+.SH WHAT GETS WRITTEN TO THE USB
+.B petitbootusb
+creates the following structure inside the mount point:
+.PP
+.nf
+<usb>/
+  petitbootusb/
+    <distro-name>/
+      vmlinuz            kernel binary
+      initrd.img         initial ramdisk
+      LiveOS/squashfs.img   (Fedora/dracut live systems)
+      casper/filesystem.squashfs  (Ubuntu/casper live systems)
+      live/filesystem.squashfs   (Debian live systems)
+      metadata.json      stored label, args, endian
+    .global-args         args appended to every menu entry
+  boot/
+    grub/
+      grub.cfg           Petitboot reads this for the boot menu
+.fi
+.PP
+All other files already on the USB are left untouched.
+.
+.SH TUI KEY BINDINGS
+When launched interactively, the following keys are available:
+.TP
+.BR "↑ / ↓" "  or  " "k / j"
+Navigate the distro list.
+.TP
+.B A
+Add an ISO — prompts for an absolute file path.
+.TP
+.B D
+Delete the selected distro (asks for confirmation).
+.TP
+.B E
+Edit the kernel command-line arguments for the selected distro.
+.TP
+.B G
+Edit the global argument list (appended to every boot entry).
+.TP
+.B R
+Regenerate
+.B grub.cfg
+from stored metadata.
+.TP
+.B Q
+Quit.
+.PP
+In text-input fields:
+.BR Enter " saves,"
+.BR Esc " cancels,"
+.B Ctrl+U
+clears the field.
+.
+.SH COMMANDS
+.TP
+.BI "add " "/mnt/usb  iso1.iso  [iso2.iso ...]"
+Extract boot files from one or more ISO images and register them on the USB.
+For each ISO,
+.B bsdtar
+is used to inspect and extract without requiring a loop mount.
+.B grub.cfg
+is regenerated automatically.
+.TP
+.BI "remove " "/mnt/usb  name"
+Delete a registered distro's directory and update
+.BR grub.cfg .
+.I name
+is the slug shown by
+.BR list .
+.TP
+.BI "list " /mnt/usb
+Show all registered distros, their kernel arguments, and the global args.
+.TP
+.BI "edit " "/mnt/usb  name"
+Interactively edit the stored kernel arguments for a distro.
+Changes are persisted to
+.B metadata.json
+and
+.B grub.cfg
+is regenerated.
+.TP
+.BI "global " /mnt/usb
+Edit the global argument list.
+These arguments are appended after each distro's own args in every
+.B grub.cfg
+menu entry.
+Useful for hardware-specific workarounds such as
+.I nomodeset
+or
+.IR module_blacklist=nouveau .
+.TP
+.BI "regenerate " /mnt/usb
+Rebuild
+.B boot/grub/grub.cfg
+from all stored
+.B metadata.json
+files plus the global args file.
+Run this if you edit metadata files by hand.
+.
+.SH DISTRO TYPES
+.B petitbootusb
+detects the following ISO types and adjusts kernel arguments accordingly:
+.TP
+.B FedoraDracut
+Fedora / RHEL live ISOs.
+Squashfs is placed at
+.IR LiveOS/squashfs.img .
+Boot args include
+.B rd.live.image
+and
+.BR rd.live.dir= .
+.TP
+.B UbuntuCasper
+Ubuntu live ISOs using casper.
+Squashfs at
+.IR casper/filesystem.squashfs .
+Boot args include
+.B boot=casper
+and
+.BR live-media-path= .
+.TP
+.B DebianLive
+Debian and Chimera Linux live ISOs.
+Squashfs (or EROFS) at
+.IR live/filesystem.squashfs .
+Boot args include
+.BR boot=live .
+.TP
+.B ArchISO
+Arch Linux Power live ISOs.
+Rootfs at
+.IR <distro>/airootfs.sfs .
+Boot args include
+.BR archisobasedir=
+and
+.BR archisolabel= ,
+the latter set to the volume label of the USB filesystem (e.g.\&
+.BR usbpetit ).
+.TP
+.B T2SDE
+T2/SDE live ISOs.
+The rootfs ships as
+.IR live.squash
+and the initrd is patched after extraction to remove a hardcoded
+.B fs=iso9660
+line that prevents booting from non-ISO9660 media.
+Boot args include
+.BR live=<path> .
+Requires
+.B zstd
+and
+.B cpio
+on the host.
+.TP
+.B MinimalInstaller
+Gentoo and similar source-based or minimal installer ISOs.
+The root filesystem is embedded inside the initrd; no squashfs is extracted.
+Original kernel arguments are used verbatim.
+.TP
+.B Generic
+Fallback for unrecognised ISOs.
+All device references (CDLABEL=, /dev/cdrom, etc.) are stripped from the
+kernel args but no USB-specific args are substituted.
+.
+.SH ENDIAN DETECTION
+After extracting the kernel,
+.B petitbootusb
+reads the ELF header of the kernel binary and checks the
+.B EI_DATA
+byte (byte 5):
+.TP
+.B 1
+Little-endian — displayed as
+.B [LE]
+(ppc64le, the common modern POWER target).
+.TP
+.B 2
+Big-endian — displayed as
+.B [BE]
+(ppc64, classic AIX-compatible mode).
+.PP
+Both endiannesses can coexist on the same USB.
+Petitboot on the S822LC will boot whichever kernel you select;
+the hardware supports both.
+.
+.SH KERNEL ARGUMENT TIPS
+Common workarounds for POWER8 driver issues:
+.TP
+.B nomodeset
+Disable kernel mode-setting.
+Prevents GPU driver initialisation — useful when the GPU driver causes a null
+pointer dereference during boot.
+.TP
+.BI module_blacklist= name
+Prevent a kernel module from loading.
+Example:
+.BR module_blacklist=nouveau .
+.TP
+.B amdgpu.dc=0
+Disable the AMD display core.
+.TP
+.B pci=nommconf
+Disable MMCONFIG PCI access — sometimes needed on POWER8 PCIe configurations.
+.PP
+Add persistent workarounds via the
+.B global
+command so they apply to every distro without having to set them individually.
+.
+.SH FILES
+.TP
+.I <usb>/boot/grub/grub.cfg
+Boot menu read by Petitboot.
+.TP
+.I <usb>/petitbootusb/<name>/metadata.json
+Per-distro stored label, paths, args, and endian.
+.TP
+.I <usb>/petitbootusb/.global-args
+Single line of kernel args appended to every menu entry.
+.
+.SH DEPENDENCIES
+.TP
+.B bsdtar
+From the
+.B libarchive
+package.
+Used to inspect and extract files from ISO images without root privileges or
+loop mounts.
+Install with:
+.B pacman \-S libarchive
+(Arch) or
+.B apt install bsdtar
+(Debian/Ubuntu).
+.TP
+.BR zstd " and " cpio
+Required only when adding a T2/SDE ISO.
+Used to decompress, patch, and recompress the T2 initrd so it can boot from
+ext4 instead of ISO9660.
+If absent, the T2 entry is still extracted but will not boot until patched
+manually.
+.
+.SH EXAMPLES
+.PP
+Add a Fedora and a Gentoo ISO to a mounted USB:
+.RS
+.nf
+petitbootusb add /mnt/usb \\
+    fedora\-38\-live\-ppc64le.iso \\
+    install\-ppc64le\-minimal\-20240101.iso
+.fi
+.RE
+.PP
+Set a global workaround for a crashing GPU driver:
+.RS
+.nf
+petitbootusb global /mnt/usb
+# enter: nomodeset module_blacklist=nouveau
+.fi
+.RE
+.PP
+Launch the interactive TUI:
+.RS
+.nf
+petitbootusb /mnt/usb
+.fi
+.RE
+.
+.SH NOTES
+Petitboot parses
+.B grub.cfg
+syntax but does
+.B not
+execute GRUB code.
+Instructions such as
+.B loopback
+or
+.B insmod
+are silently ignored.
+Kernel and initrd files must be physically present on the USB — they cannot be
+read from inside an ISO at boot time.
+.PP
+The USB does not need a PReP boot partition.
+PReP is only required when installing GRUB2 as the primary bootloader, which
+.B petitbootusb
+does not do.
+.
+.SH SEE ALSO
+.BR petitboot (8),
+.BR grub.cfg (5),
+.BR bsdtar (1),
+.BR mkfs.fat (8),
+.BR mkfs.ext4 (8)
+.
+.SH AUTHORS
+petitbootusb contributors.

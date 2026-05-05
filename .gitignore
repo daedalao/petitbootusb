@@ -1,0 +1,19 @@
+# Build artifacts
+petitbootusb
+petitbootusb-ppc64le
+*.o
+*.obj
+
+# Editor / OS junk
+*.swp
+*~
+.DS_Store
+
+# Local test material — ISOs and rootfs tarballs are huge and not redistributable
+*.iso
+*.tar.gz
+*.tar.xz
+*.tar.zst
+
+# Editor/agent state
+.claude/
