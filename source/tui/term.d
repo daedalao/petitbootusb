@@ -34,6 +34,31 @@ version(linux)
     else version (Alpha)   enum int _VMIN = 4, _VTIME = 5;
     else                   enum int _VMIN = 6, _VTIME = 5;
 
+    // c_lflag / c_iflag / c_cflag bit values also diverge between x86 and
+    // the BSD-derived PowerPC/SPARC/Alpha/MIPS termbits. Druntime hardcodes
+    // the x86 set, so on those architectures `c_lflag &= ~ICANON` masks the
+    // wrong bit and canonical mode never gets disabled — read() then blocks
+    // forever waiting for a line terminator. Override the ones we touch.
+    version (PPC) {
+        enum uint _ICANON = 0x00000100;
+        enum uint _ISIG   = 0x00000080;
+        enum uint _IEXTEN = 0x00000400;
+        enum uint _IXON   = 0x00000200;
+        enum uint _CS8    = 0x00000300;
+    } else version (PPC64) {
+        enum uint _ICANON = 0x00000100;
+        enum uint _ISIG   = 0x00000080;
+        enum uint _IEXTEN = 0x00000400;
+        enum uint _IXON   = 0x00000200;
+        enum uint _CS8    = 0x00000300;
+    } else {
+        enum uint _ICANON = ICANON;
+        enum uint _ISIG   = ISIG;
+        enum uint _IEXTEN = IEXTEN;
+        enum uint _IXON   = IXON;
+        enum uint _CS8    = CS8;
+    }
+
     enum SIGWINCH = 28;
 }
 
@@ -66,9 +91,9 @@ void enterRaw()
 {
     tcgetattr(STDIN_FILENO, &_saved);
     termios raw = _saved;
-    raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
-    raw.c_iflag &= ~(IXON | ICRNL | BRKINT | INPCK | ISTRIP);
-    raw.c_cflag |= CS8;
+    raw.c_lflag &= ~(ECHO | _ICANON | _ISIG | _IEXTEN);
+    raw.c_iflag &= ~(_IXON | ICRNL | BRKINT | INPCK | ISTRIP);
+    raw.c_cflag |= _CS8;
     raw.c_oflag &= ~OPOST;
     raw.c_cc[_VMIN]  = 0;
     raw.c_cc[_VTIME] = 1;   // 100 ms read timeout — drives the UI tick rate
