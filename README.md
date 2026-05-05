@@ -41,11 +41,14 @@ and uses `kexec` to load the selected kernel.
 
 ## Build
 
-Native (host == target):
+Native (host == target). Three D toolchains are supported; pick the one
+that's on your box:
 
 ```sh
-make           # uses dmd by default
-make DMD=ldc2  # build with LDC instead
+make           # dmd  (x86_64 only)
+make DMD=ldc2  # ldc2 (any LLVM target — recommended on x86_64 and ppc64le)
+make gdc       # gdc  (gcc D frontend — only path on Arch Power, where
+               #       neither dmd nor ldc are packaged)
 ```
 
 Cross-compile to ppc64le from x86_64 (requires LDC with the ppc64le target):
@@ -54,8 +57,14 @@ Cross-compile to ppc64le from x86_64 (requires LDC with the ppc64le target):
 make cross     # produces ./petitbootusb-ppc64le
 ```
 
-`dmd` does not target `ppc64le`; use `ldc2` on the POWER box itself or
-cross-compile with `make cross`.
+`dmd` does not target `ppc64le`. On the POWER box you have two native options:
+
+- **ldc2** — install upstream's prebuilt tarball (LDC does not ship a
+  ppc64le binary on its release page; build from source on the box, or
+  cross-compile with `make cross` and copy the result).
+- **gdc** — `make gdc` works wherever GCC's D frontend is available. On
+  Arch Power, that means repackaging Debian's `gdc-N` `.deb`s; see the
+  per-platform notes in the project history.
 
 ## Install
 

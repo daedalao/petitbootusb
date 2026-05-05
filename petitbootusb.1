@@ -352,6 +352,50 @@ ext4 instead of ISO9660.
 If absent, the T2 entry is still extracted but will not boot until patched
 manually.
 .
+.SH BUILDING
+.B petitbootusb
+is written in D and uses a plain
+.B Makefile
+\- no
+.B dub
+or other D-side dependencies.
+Three compiler toolchains are supported; pick whichever is available
+on the host:
+.TP
+.B make
+Build with
+.B dmd
+(default).
+Works on x86_64 only \- DMD has no PowerPC backend.
+.TP
+.B make DMD=ldc2
+Build with
+.B ldc2
+(LLVM-based).
+Recommended on
+.BR ppc64le ;
+also fine on x86_64.
+.TP
+.B make gdc
+Build with
+.B gdc
+(GCC's D frontend).
+The only available path on Arch Power, where neither
+.B dmd
+nor
+.B ldc
+are packaged.
+.TP
+.B make cross
+Cross-compile from x86_64 to ppc64le using
+.BR ldc2 .
+Produces
+.BR ./petitbootusb-ppc64le .
+.PP
+.B make install
+copies the binary and this manpage into
+.IR DESTDIR/usr/local .
+.
 .SH EXAMPLES
 .PP
 Add a Fedora and a Gentoo ISO to a mounted USB:
