@@ -10,7 +10,30 @@ extern(C) int ioctl(int, ulong, ...) nothrow @nogc;
 version(linux)
 {
     struct winsize { ushort ws_row, ws_col, ws_xpixel, ws_ypixel; }
-    enum ulong TIOCGWINSZ = 0x5413;
+
+    // TIOCGWINSZ is architecture-specific on Linux: x86/ARM/RISC-V use the
+    // simple form, while the BSD-derived ioctl encoding (PPC, SPARC, MIPS,
+    // Alpha) packs direction/size/group into the request number.
+    version (PPC)        enum ulong TIOCGWINSZ = 0x40087468;
+    else version (PPC64) enum ulong TIOCGWINSZ = 0x40087468;
+    else version (SPARC) enum ulong TIOCGWINSZ = 0x40087468;
+    else version (SPARC64) enum ulong TIOCGWINSZ = 0x40087468;
+    else version (MIPS32)  enum ulong TIOCGWINSZ = 0x40087468;
+    else version (MIPS64)  enum ulong TIOCGWINSZ = 0x40087468;
+    else version (Alpha)   enum ulong TIOCGWINSZ = 0x40087468;
+    else                   enum ulong TIOCGWINSZ = 0x5413;
+
+    // c_cc[] indices for VMIN/VTIME also differ per architecture, and
+    // druntime's core.sys.posix.termios hardcodes the x86 values. The
+    // kernel's true indices (from arch/<arch>/include/uapi/asm/termbits.h)
+    // are: PPC = (5, 7), MIPS = (4, 5), Alpha = (4, 5); all others = (6, 5).
+    version (PPC)        enum int _VMIN = 5, _VTIME = 7;
+    else version (PPC64) enum int _VMIN = 5, _VTIME = 7;
+    else version (MIPS32)  enum int _VMIN = 4, _VTIME = 5;
+    else version (MIPS64)  enum int _VMIN = 4, _VTIME = 5;
+    else version (Alpha)   enum int _VMIN = 4, _VTIME = 5;
+    else                   enum int _VMIN = 6, _VTIME = 5;
+
     enum SIGWINCH = 28;
 }
 
@@ -47,8 +70,8 @@ void enterRaw()
     raw.c_iflag &= ~(IXON | ICRNL | BRKINT | INPCK | ISTRIP);
     raw.c_cflag |= CS8;
     raw.c_oflag &= ~OPOST;
-    raw.c_cc[VMIN]  = 0;
-    raw.c_cc[VTIME] = 1;   // 100 ms read timeout — drives the UI tick rate
+    raw.c_cc[_VMIN]  = 0;
+    raw.c_cc[_VTIME] = 1;   // 100 ms read timeout — drives the UI tick rate
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
     _inRaw = true;
 
