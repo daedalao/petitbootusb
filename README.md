@@ -67,15 +67,31 @@ sudo make install   # /usr/local/bin/petitbootusb + man page
 
 A single ext4 partition is recommended. ext4 has no 4 GiB file size limit
 (some squashfs images blow past it) and preserves Unix permissions. Format
-with the conventional label and your own UID at the root, so subsequent
-runs don't need root:
+with the conventional label and your own UID at the root so subsequent
+runs don't need root, then let `udisksctl` mount it under `/run/media/$USER/`
+without touching `/etc/fstab` or `sudo`:
 
 ```sh
 sudo parted /dev/sdX mklabel msdos
 sudo parted /dev/sdX mkpart primary ext4 1MiB 100%
 sudo mkfs.ext4 -L usbpetit -E root_owner=$(id -u):$(id -g) /dev/sdX1
-sudo mount /dev/sdX1 /mnt/usb
+
+udisksctl mount -b /dev/sdX1
+# Mounted /dev/sdX1 at /run/media/<you>/usbpetit
+
+petitbootusb /run/media/$USER/usbpetit
 ```
+
+When you're done, eject cleanly without root:
+
+```sh
+udisksctl unmount -b /dev/sdX1
+udisksctl power-off -b /dev/sdX
+```
+
+`udisksctl` ships in the `udisks2` package and is what most desktop file
+managers use under the hood. The classic `sudo mount /dev/sdX1 /mnt/usb`
+still works if you prefer it.
 
 ## Usage
 

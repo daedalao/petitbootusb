@@ -78,21 +78,36 @@ do not need root.
 .B 4. Mount
 .RS
 .nf
-sudo mount /dev/sdX1 /mnt/usb
+udisksctl mount \-b /dev/sdX1
+# Mounted /dev/sdX1 at /run/media/<you>/usbpetit
 .fi
 .RE
+The
+.B udisksctl
+command (from
+.BR udisks2 )
+mounts removable media under
+.I /run/media/$USER/<label>
+without
+.B sudo
+or
+.IR /etc/fstab .
+The classic
+.B sudo mount /dev/sdX1 /mnt/usb
+still works if preferred.
 .PP
 .B 5. Run petitbootusb
 .RS
 .nf
-./petitbootusb /mnt/usb
+./petitbootusb /run/media/$USER/usbpetit
 .fi
 .RE
 .PP
-When finished, unmount before removing the drive:
+When finished, eject cleanly without root:
 .RS
 .nf
-umount /mnt/usb
+udisksctl unmount  \-b /dev/sdX1
+udisksctl power\-off \-b /dev/sdX
 .fi
 .RE
 .
